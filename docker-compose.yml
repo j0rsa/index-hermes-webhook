@@ -1,0 +1,32 @@
+services:
+  webhook:
+    build: .
+    image: index-hermes-webhook:local
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      # --- Hermes API ---
+      HERMES_BASE_URL: ${HERMES_BASE_URL:-http://host.docker.internal:8642}
+      HERMES_API_KEY: ${HERMES_API_KEY:-}
+      HERMES_MODEL: ${HERMES_MODEL:-hermes-agent}
+      HERMES_SYSTEM_PROMPT: ${HERMES_SYSTEM_PROMPT:-You are a helpful assistant. Process the following voice note and respond concisely.}
+      HERMES_MAX_TOKENS: ${HERMES_MAX_TOKENS:-1024}
+      HERMES_TEMPERATURE: ${HERMES_TEMPERATURE:-0.7}
+      HERMES_TIMEOUT_SECONDS: ${HERMES_TIMEOUT_SECONDS:-30.0}
+      # --- Whisper STT (optional) ---
+      WHISPER_BASE_URL: ${WHISPER_BASE_URL:-}
+      WHISPER_API_KEY: ${WHISPER_API_KEY:-}
+      WHISPER_MODEL: ${WHISPER_MODEL:-whisper-1}
+      # --- Security ---
+      WEBHOOK_AUTH_TOKEN: ${WEBHOOK_AUTH_TOKEN:-}
+      # --- App ---
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
