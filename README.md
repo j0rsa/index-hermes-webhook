@@ -3,8 +3,8 @@
 A stateless FastAPI bridge that receives audio webhooks from the **Pebble Index 01** wearable and forwards them to a **Hermes** (or any OpenAI-compatible) LLM server — so every voice note you record on the ring gets processed by your own AI, running on your own hardware.
 
 ```
-┌─────────────────┐     multipart/form-data      ┌──────────────────────┐
-│ Pebble Index 01 │ ─── POST /webhook ──────────► │  index-hermes-webhook │
+┌─────────────────┐     multipart/form-data       ┌──────────────────────┐
+│ Pebble Index 01 │ ─── POST /webhook ──────────► │ index-hermes-webhook │
 │    (the ring)   │                               │   (this service)     │
 └─────────────────┘                               └──────────┬───────────┘
                                                              │  /v1/chat/completions
