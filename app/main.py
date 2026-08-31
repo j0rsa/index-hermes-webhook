@@ -77,6 +77,7 @@ async def handle_webhook(
     text: str
     if transcription and transcription.strip():
         text = transcription.strip()
+        logger.debug("transcription: %s", text)
     elif audio is not None:
         audio_bytes = await audio.read()
         try:
@@ -91,6 +92,7 @@ async def handle_webhook(
         except httpx.HTTPError as exc:
             logger.error("Whisper transcription error: %s", exc)
             raise HTTPException(status_code=502, detail=f"Whisper error: {exc}") from exc
+        logger.debug("transcription (from audio): %s", text)
     else:
         raise HTTPException(status_code=400, detail="No transcription or audio provided")
 
