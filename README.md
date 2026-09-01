@@ -84,11 +84,16 @@ In the **Pebble** mobile app:
 1. Open **Index** → **Advanced Features**
 2. Enable **Webhook** and paste your public URL: `https://abc123.ngrok-free.app/webhook`
 3. Set **Mode** to **Both** (sends transcription + audio) or **Text only** (transcription only — cheaper/faster)
-4. *(Optional)* Under **Custom Headers**, add:
+4. Under **Custom Headers**, add:
+   ```
+   X-Ring-ID: <a name you choose, e.g. "living-room-ring">
+   ```
+   This is how Hermes knows which ring sent the note. If you have only one ring, any static name works.
+5. *(Optional)* To secure the endpoint, also add:
    ```
    Authorization: Bearer <your-WEBHOOK_AUTH_TOKEN>
    ```
-   — and set the same value in your `.env`
+   — and set the same value as `WEBHOOK_AUTH_TOKEN` in your `.env`
 
 ---
 
@@ -144,28 +149,40 @@ The Pebble sends a `multipart/form-data` POST with the following fields:
 | `transcription` | `string` | Text and Both modes |
 | `audio` | `audio/mp4` (M4A) | Audio and Both modes |
 | `recordedAt` | Unix ms timestamp | Always |
-| `client` | `string` — device identifier, e.g. `"ring"` or `"ring:abc123"` | Always |
+| `client` | `string` — always `"ring"` | Always |
+| `test` | `"true"` | Only on test events sent from the Pebble app |
+
+In addition, the service reads one **custom HTTP header**:
+
+| Header | Purpose |
+|---|---|
+| `X-Ring-ID` | Identifies which ring sent the webhook. Set this as a Custom Header in the Pebble app (see [Setup](#4-configure-your-pebble-index-01)). |
 
 This service prioritises `transcription` if present. If only `audio` is received, it is forwarded to the configured Whisper endpoint. If neither is present, HTTP 400 is returned.
 
 ### Forwarded to Hermes (user message)
 
-All non-audio fields are serialised as a JSON string and sent as the `user` message in the chat completion request. The `audio` binary is always dropped.
+All non-audio fields plus the `X-Ring-ID` header are serialised as a JSON string and sent as the `user` message in the chat completion request. The `audio` binary is always dropped. Fields are omitted when absent.
 
 ```json
 {
   "transcription": "Buy oat milk on the way home",
-  "recorded_at": 1725148800000,
-  "client": "ring:abc123"
+  "ring_id": "my-ring",
+  "recorded_at": 1788272834517,
+  "client": "ring",
+  "test": true
 }
 ```
 
-`recorded_at` and `client` are omitted if the Pebble did not send them. Your `HERMES_SYSTEM_PROMPT` should tell the model how to interpret these fields — for example:
+> **Note:** `test: true` is included when the Pebble sends a test event so your system prompt can instruct Hermes to ignore or acknowledge it differently.
+
+Your `HERMES_SYSTEM_PROMPT` should tell the model how to interpret these fields — for example:
 
 ```
 You are a personal assistant processing voice notes from a smart ring.
-The "recorded_at" field is a Unix millisecond timestamp of when the note was recorded.
-The "client" field identifies the device and ring ID that sent the note.
+"ring_id" identifies the specific ring that recorded the note.
+"recorded_at" is a Unix millisecond timestamp of when the note was recorded.
+If "test" is true, acknowledge the test but do not act on the content.
 ```
 
 ---

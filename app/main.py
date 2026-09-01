@@ -62,14 +62,19 @@ async def handle_webhook(
     recorded_at: Annotated[int | None, Form(alias="recordedAt")] = None,
     client: Annotated[str | None, Form()] = None,
     transcription: Annotated[str | None, Form()] = None,
+    test: Annotated[str | None, Form()] = None,
     audio: Annotated[UploadFile | None, File()] = None,
+    x_ring_id: Annotated[str | None, Header()] = None,
     _: None = Depends(_verify_auth),
     settings: Settings = Depends(get_settings),
 ) -> JSONResponse:
+    is_test = test is not None and test.lower() == "true"
     logger.info(
-        "webhook received client=%s recorded_at=%s has_transcription=%s has_audio=%s",
+        "webhook received ring_id=%s client=%s recorded_at=%s is_test=%s has_transcription=%s has_audio=%s",
+        x_ring_id,
         client,
         recorded_at,
+        is_test,
         transcription is not None,
         audio is not None,
     )
@@ -97,10 +102,14 @@ async def handle_webhook(
         raise HTTPException(status_code=400, detail="No transcription or audio provided")
 
     note: dict[str, object] = {"transcription": text}
+    if x_ring_id is not None:
+        note["ring_id"] = x_ring_id
     if recorded_at is not None:
         note["recorded_at"] = recorded_at
     if client is not None:
         note["client"] = client
+    if is_test:
+        note["test"] = True
 
     logger.debug("forwarding to Hermes: %s", note)
 
