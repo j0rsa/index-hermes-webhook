@@ -96,8 +96,16 @@ async def handle_webhook(
     else:
         raise HTTPException(status_code=400, detail="No transcription or audio provided")
 
+    note: dict[str, object] = {"transcription": text}
+    if recorded_at is not None:
+        note["recorded_at"] = recorded_at
+    if client is not None:
+        note["client"] = client
+
+    logger.debug("forwarding to Hermes: %s", note)
+
     try:
-        reply = await call_hermes(text, settings)
+        reply = await call_hermes(note, settings)
     except httpx.TimeoutException as exc:
         logger.error("Hermes timeout: %s", exc)
         raise HTTPException(status_code=504, detail="Hermes API timed out") from exc

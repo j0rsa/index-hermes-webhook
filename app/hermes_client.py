@@ -23,8 +23,10 @@ async def transcribe_audio(audio_bytes: bytes, filename: str, settings: Settings
         return str(response.json()["text"])
 
 
-async def call_hermes(transcription: str, settings: Settings) -> str:
-    """Send a transcription to the Hermes API and return the assistant reply."""
+async def call_hermes(note: dict[str, object], settings: Settings) -> str:
+    """Send a structured note payload to the Hermes API and return the assistant reply."""
+    import json
+
     headers: dict[str, str] = {"Content-Type": "application/json"}
     if settings.hermes_api_key:
         headers["Authorization"] = f"Bearer {settings.hermes_api_key}"
@@ -33,7 +35,7 @@ async def call_hermes(transcription: str, settings: Settings) -> str:
         "model": settings.hermes_model,
         "messages": [
             {"role": "system", "content": settings.hermes_system_prompt},
-            {"role": "user", "content": transcription},
+            {"role": "user", "content": json.dumps(note, ensure_ascii=False)},
         ],
         "max_tokens": settings.hermes_max_tokens,
         "temperature": settings.hermes_temperature,
