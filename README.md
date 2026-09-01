@@ -135,6 +135,8 @@ Only needed when the Pebble is configured to send **audio only** (no transcripti
 
 ## Webhook payload
 
+### Incoming (from Pebble)
+
 The Pebble sends a `multipart/form-data` POST with the following fields:
 
 | Field | Type | When present |
@@ -142,9 +144,29 @@ The Pebble sends a `multipart/form-data` POST with the following fields:
 | `transcription` | `string` | Text and Both modes |
 | `audio` | `audio/mp4` (M4A) | Audio and Both modes |
 | `recordedAt` | Unix ms timestamp | Always |
-| `client` | `"ring"` | Always |
+| `client` | `string` — device identifier, e.g. `"ring"` or `"ring:abc123"` | Always |
 
 This service prioritises `transcription` if present. If only `audio` is received, it is forwarded to the configured Whisper endpoint. If neither is present, HTTP 400 is returned.
+
+### Forwarded to Hermes (user message)
+
+All non-audio fields are serialised as a JSON string and sent as the `user` message in the chat completion request. The `audio` binary is always dropped.
+
+```json
+{
+  "transcription": "Buy oat milk on the way home",
+  "recorded_at": 1725148800000,
+  "client": "ring:abc123"
+}
+```
+
+`recorded_at` and `client` are omitted if the Pebble did not send them. Your `HERMES_SYSTEM_PROMPT` should tell the model how to interpret these fields — for example:
+
+```
+You are a personal assistant processing voice notes from a smart ring.
+The "recorded_at" field is a Unix millisecond timestamp of when the note was recorded.
+The "client" field identifies the device and ring ID that sent the note.
+```
 
 ---
 
