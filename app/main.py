@@ -14,12 +14,18 @@ from .hermes_client import call_hermes, transcribe_audio
 logger = logging.getLogger(__name__)
 
 
+class _HealthCheckFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "GET /health" not in record.getMessage()
+
+
 def _setup_logging(level: str) -> None:
     logging.basicConfig(
         stream=sys.stdout,
         level=getattr(logging, level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    logging.getLogger("uvicorn.access").addFilter(_HealthCheckFilter())
 
 
 @lru_cache
