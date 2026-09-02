@@ -31,11 +31,16 @@ async def call_hermes(note: dict[str, object], settings: Settings) -> str:
     if settings.hermes_api_key:
         headers["Authorization"] = f"Bearer {settings.hermes_api_key}"
 
+    ring_payload = json.dumps(note, ensure_ascii=False)
+    user_content = (
+        f"<instructions>\n{settings.hermes_system_prompt}\n</instructions>"
+        f"<ring_payload>\n{ring_payload}\n</ring_payload>"
+    )
+
     payload = {
         "model": settings.hermes_model,
         "messages": [
-            {"role": "system", "content": settings.hermes_system_prompt},
-            {"role": "user", "content": json.dumps(note, ensure_ascii=False)},
+            {"role": "user", "content": user_content},
         ],
         "max_tokens": settings.hermes_max_tokens,
         "temperature": settings.hermes_temperature,
