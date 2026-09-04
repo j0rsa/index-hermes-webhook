@@ -164,7 +164,9 @@ This service prioritises `transcription` if present. If only `audio` is received
 
 ### Forwarded to Hermes (job prompt)
 
-The service creates a Hermes job whose `prompt` field is a tagged message:
+Each webhook call creates a **new** one-time Hermes job named `ring-<ring_id>` (e.g. `ring-my-ring`). The name is the same for every note from the same ring, which makes jobs identifiable in Hermes logs and UI, but each call is an independent ephemeral job — not an update to an existing one.
+
+The job's `prompt` field is a tagged message:
 
 ```
 <instructions>
