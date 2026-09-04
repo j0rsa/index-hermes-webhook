@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadF
 from fastapi.responses import JSONResponse
 
 from .config import Settings
-from .hermes_client import call_hermes, transcribe_audio
+from .hermes_client import schedule_hermes_job, transcribe_audio
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,16 @@ def _verify_auth(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+def _resolve_deliver(
+    x_channel_id: str | None, x_telegram_id: str | None
+) -> str:
+    if x_channel_id:
+        return x_channel_id
+    if x_telegram_id:
+        return f"telegram:{x_telegram_id}"
+    return "telegram"
+
+
 @app.post("/webhook")
 async def handle_webhook(
     recorded_at: Annotated[int | None, Form(alias="recordedAt")] = None,
@@ -71,18 +81,22 @@ async def handle_webhook(
     test: Annotated[str | None, Form()] = None,
     audio: Annotated[UploadFile | None, File()] = None,
     x_ring_id: Annotated[str | None, Header()] = None,
+    x_channel_id: Annotated[str | None, Header()] = None,
+    x_telegram_id: Annotated[str | None, Header()] = None,
     _: None = Depends(_verify_auth),
     settings: Settings = Depends(get_settings),
 ) -> JSONResponse:
     is_test = test is not None and test.lower() == "true"
+    deliver = _resolve_deliver(x_channel_id, x_telegram_id)
     logger.info(
-        "webhook received ring_id=%s client=%s recorded_at=%s is_test=%s has_transcription=%s has_audio=%s",
+        "webhook received ring_id=%s client=%s recorded_at=%s is_test=%s has_transcription=%s has_audio=%s deliver=%s",
         x_ring_id,
         client,
         recorded_at,
         is_test,
         transcription is not None,
         audio is not None,
+        deliver,
     )
 
     text: str
@@ -117,10 +131,10 @@ async def handle_webhook(
     if is_test:
         note["test"] = True
 
-    logger.debug("forwarding to Hermes: %s", note)
+    logger.debug("scheduling Hermes job: deliver=%s note=%s", deliver, note)
 
     try:
-        reply = await call_hermes(note, settings)
+        job_id = await schedule_hermes_job(note, deliver, settings)
     except httpx.TimeoutException as exc:
         logger.error("Hermes timeout: %s", exc)
         raise HTTPException(status_code=504, detail="Hermes API timed out") from exc
@@ -133,8 +147,8 @@ async def handle_webhook(
         logger.error("Hermes connection error: %s", exc)
         raise HTTPException(status_code=502, detail=f"Hermes connection error: {exc}") from exc
 
-    logger.info("Hermes replied (%d chars)", len(reply))
-    return JSONResponse({"response": reply, "transcription": text})
+    logger.info("Hermes job scheduled job_id=%s deliver=%s", job_id, deliver)
+    return JSONResponse({"job_id": job_id, "transcription": text})
 
 
 @app.get("/health")

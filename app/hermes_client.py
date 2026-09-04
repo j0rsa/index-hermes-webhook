@@ -23,8 +23,10 @@ async def transcribe_audio(audio_bytes: bytes, filename: str, settings: Settings
         return str(response.json()["text"])
 
 
-async def call_hermes(note: dict[str, object], settings: Settings) -> str:
-    """Send a structured note payload to the Hermes API and return the assistant reply."""
+async def schedule_hermes_job(
+    note: dict[str, object], deliver: str, settings: Settings
+) -> str:
+    """Schedule a one-time Hermes job and trigger it immediately. Returns the job ID."""
     import json
 
     headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -32,27 +34,26 @@ async def call_hermes(note: dict[str, object], settings: Settings) -> str:
         headers["Authorization"] = f"Bearer {settings.hermes_api_key}"
 
     ring_payload = json.dumps(note, ensure_ascii=False)
-    user_content = (
+    prompt = (
         f"<instructions>\n{settings.hermes_system_prompt}\n</instructions>"
         f"<ring_payload>\n{ring_payload}\n</ring_payload>"
     )
 
-    payload = {
-        "model": settings.hermes_model,
-        "messages": [
-            {"role": "user", "content": user_content},
-        ],
-        "max_tokens": settings.hermes_max_tokens,
-        "temperature": settings.hermes_temperature,
-        "stream": False,
-    }
+    job_name = f"ring-{note.get('ring_id', 'webhook')}"
 
     async with httpx.AsyncClient(timeout=settings.hermes_timeout_seconds) as client:
-        response = await client.post(
-            f"{settings.hermes_base_url}/v1/chat/completions",
+        create_resp = await client.post(
+            f"{settings.hermes_base_url}/api/jobs",
             headers=headers,
-            json=payload,
+            json={"name": job_name, "prompt": prompt, "schedule": "in 1m", "deliver": deliver},
         )
-        response.raise_for_status()
-        data = response.json()
-        return str(data["choices"][0]["message"]["content"])
+        create_resp.raise_for_status()
+        job_id = str(create_resp.json()["job"]["id"])
+
+        run_resp = await client.post(
+            f"{settings.hermes_base_url}/api/jobs/{job_id}/run",
+            headers=headers,
+        )
+        run_resp.raise_for_status()
+
+    return job_id

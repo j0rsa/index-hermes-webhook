@@ -7,11 +7,11 @@ A stateless FastAPI bridge that receives audio webhooks from the **Pebble Index 
 │ Pebble Index 01 │ ─── POST /webhook ──────────► │ index-hermes-webhook │
 │    (the ring)   │                               │   (this service)     │
 └─────────────────┘                               └──────────┬───────────┘
-                                                             │  /v1/chat/completions
+                                                             │  POST /api/jobs  (create + run)
                                                              ▼
                                                   ┌──────────────────────┐
                                                   │   Hermes API server  │
-                                                  │  (OpenAI-compatible) │
+                                                  │  (job scheduling)    │
                                                   └──────────────────────┘
 ```
 
@@ -20,8 +20,8 @@ A stateless FastAPI bridge that receives audio webhooks from the **Pebble Index 
 ## How it works
 
 1. You speak into your Pebble Index 01. The ring transcribes your voice and POSTs the result to a configured webhook URL.
-2. This service receives the webhook, extracts the transcription, and sends it to a Hermes-compatible LLM server along with a configurable **system prompt**.
-3. The LLM response is returned in the HTTP reply (visible in logs / usable by downstream systems).
+2. This service receives the webhook, extracts the transcription, and schedules a one-time **Hermes job** containing the note payload.
+3. Hermes runs the job and delivers the response to the configured channel (Telegram by default). The webhook itself returns immediately with the job ID — no waiting for the LLM.
 
 The service is **completely stateless** — no database, no file writes, no disk. Every request lives and dies in memory.
 
@@ -152,29 +152,31 @@ The Pebble sends a `multipart/form-data` POST with the following fields:
 | `client` | `string` — always `"ring"` | Always |
 | `test` | `"true"` | Only on test events sent from the Pebble app |
 
-In addition, the service reads one **custom HTTP header**:
+In addition, the service reads these **custom HTTP headers**:
 
 | Header | Purpose |
 |---|---|
 | `X-Ring-ID` | Identifies which ring sent the webhook. Set this as a Custom Header in the Pebble app (see [Setup](#4-configure-your-pebble-index-01)). |
+| `X-Channel-ID` | Explicit Hermes delivery channel (e.g. `telegram:12345678`). Takes precedence over `X-Telegram-ID`. |
+| `X-Telegram-ID` | Telegram user/chat ID. If set (and `X-Channel-ID` is absent), the job is delivered to `telegram:<id>`. Falls back to `telegram` when both headers are absent. |
 
 This service prioritises `transcription` if present. If only `audio` is received, it is forwarded to the configured Whisper endpoint. If neither is present, HTTP 400 is returned.
 
-### Forwarded to Hermes (user message)
+### Forwarded to Hermes (job prompt)
 
-All non-audio fields plus the `X-Ring-ID` header are serialised as a JSON string and sent as the `user` message in the chat completion request. The `audio` binary is always dropped. Fields are omitted when absent.
+The service creates a Hermes job whose `prompt` field is a tagged message:
 
-```json
-{
-  "transcription": "Buy oat milk on the way home",
-  "ring_id": "my-ring",
-  "recorded_at": 1788272834517,
-  "client": "ring",
-  "test": true
-}
+```
+<instructions>
+{HERMES_SYSTEM_PROMPT}
+</instructions><ring_payload>
+{"transcription": "Buy oat milk on the way home", "ring_id": "my-ring", ...}
+</ring_payload>
 ```
 
-> **Note:** `test: true` is included when the Pebble sends a test event so your system prompt can instruct Hermes to ignore or acknowledge it differently.
+All non-audio fields plus `X-Ring-ID` are included in `ring_payload`. The `audio` binary is always dropped. Fields are omitted when absent.
+
+> **Note:** `test: true` is included when the Pebble sends a test event so your prompt can instruct Hermes to ignore or acknowledge it differently.
 
 Your `HERMES_SYSTEM_PROMPT` should tell the model how to interpret these fields — for example:
 
@@ -183,6 +185,15 @@ You are a personal assistant processing voice notes from a smart ring.
 "ring_id" identifies the specific ring that recorded the note.
 "recorded_at" is a Unix millisecond timestamp of when the note was recorded.
 If "test" is true, acknowledge the test but do not act on the content.
+```
+
+### Hermes agent tip
+
+If your Hermes agent wraps cron-job responses in extra formatting, add this to its agent config to keep replies natural:
+
+```yaml
+cron:
+  wrap_response: false
 ```
 
 ---
