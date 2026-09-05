@@ -1,6 +1,6 @@
 [project]
 name = "index-hermes-webhook"
-version = "0.2.0"
+version = "0.2.1"
 description = "Pebble Index 01 audio webhook bridge to Hermes API"
 requires-python = ">=3.11"
 dependencies = [

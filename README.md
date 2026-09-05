@@ -3,16 +3,19 @@
 A stateless FastAPI bridge that receives audio webhooks from the **Pebble Index 01** wearable and forwards them to a **Hermes** (or any OpenAI-compatible) LLM server — so every voice note you record on the ring gets processed by your own AI, running on your own hardware.
 
 ```
-┌─────────────────┐     multipart/form-data       ┌──────────────────────┐
-│ Pebble Index 01 │ ─── POST /webhook ──────────► │ index-hermes-webhook │
-│    (the ring)   │                               │   (this service)     │
-└─────────────────┘                               └──────────┬───────────┘
-                                                             │  POST /api/jobs  (create + run)
-                                                             ▼
-                                                  ┌──────────────────────┐
-                                                  │   Hermes API server  │
-                                                  │  (job scheduling)    │
-                                                  └──────────────────────┘
+┌─────────────────┐    multipart/form-data     ┌──────────────────────┐
+│ Pebble Index 01 │ ── POST /webhook ─────────►│ index-hermes-webhook │
+│    (the ring)   │ ◄─ 202 Accepted ───────────│   (this service)     │
+└─────────────────┘                            └────────┬──────┬──────┘
+                                                background│task  │
+                                              ┌───────────┘      │
+                                     if audio only               │ POST /api/jobs
+                                              │                  │ POST /api/jobs/{id}/run
+                                              ▼                  ▼
+                                   ┌──────────────────┐  ┌──────────────────────┐
+                                   │   Whisper STT    │  │   Hermes API server  │
+                                   │  /audio/trans.   │  │   (job scheduling)   │
+                                   └──────────────────┘  └──────────────────────┘
 ```
 
 ---
@@ -20,8 +23,9 @@ A stateless FastAPI bridge that receives audio webhooks from the **Pebble Index 
 ## How it works
 
 1. You speak into your Pebble Index 01. The ring transcribes your voice and POSTs the result to a configured webhook URL.
-2. This service receives the webhook, extracts the transcription, and schedules a one-time **Hermes job** containing the note payload.
-3. Hermes runs the job and delivers the response to the configured channel (Telegram by default). The webhook itself returns immediately with the job ID — no waiting for the LLM.
+2. This service validates the request and immediately returns **202 Accepted** — the connection is never held open.
+3. A background task takes over: if only raw audio was received it calls Whisper to transcribe it first, then schedules a one-time **Hermes job** with the note payload.
+4. Hermes runs the job and delivers the response to the configured channel (Telegram by default).
 
 The service is **completely stateless** — no database, no file writes, no disk. Every request lives and dies in memory.
 
