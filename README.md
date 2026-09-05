@@ -7,15 +7,15 @@ A stateless FastAPI bridge that receives audio webhooks from the **Pebble Index 
 │ Pebble Index 01 │ ── POST /webhook ─────────►│ index-hermes-webhook │
 │    (the ring)   │ ◄─ 202 Accepted ───────────│   (this service)     │
 └─────────────────┘                            └────────┬──────┬──────┘
-                                                background│task  │
-                                              ┌───────────┘      │
-                                     if audio only               │ POST /api/jobs
-                                              │                  │ POST /api/jobs/{id}/run
-                                              ▼                  ▼
-                                   ┌──────────────────┐  ┌──────────────────────┐
-                                   │   Whisper STT    │  │   Hermes API server  │
-                                   │  /audio/trans.   │  │   (job scheduling)   │
-                                   └──────────────────┘  └──────────────────────┘
+                                              background│task  │
+                                            ┌───────────┘      │
+                                   if audio only               │ POST /api/jobs
+                                            │                  │ POST /api/jobs/{id}/run
+                                            ▼                  ▼
+                                 ┌──────────────────┐  ┌──────────────────────┐
+                                 │   Whisper STT    │  │   Hermes API server  │
+                                 │  /audio/trans.   │  │   (job scheduling)   │
+                                 └──────────────────┘  └──────────────────────┘
 ```
 
 ---
