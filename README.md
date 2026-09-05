@@ -3,19 +3,21 @@
 A stateless FastAPI bridge that receives audio webhooks from the **Pebble Index 01** wearable and forwards them to a **Hermes** (or any OpenAI-compatible) LLM server — so every voice note you record on the ring gets processed by your own AI, running on your own hardware.
 
 ```
-┌─────────────────┐    multipart/form-data     ┌──────────────────────┐
-│ Pebble Index 01 │ ── POST /webhook ─────────►│ index-hermes-webhook │
-│    (the ring)   │ ◄─ 202 Accepted ───────────│   (this service)     │
-└─────────────────┘                            └────────┬──────┬──────┘
-                                              background│task  │
-                                            ┌───────────┘      │
-                                   if audio only               │ POST /api/jobs
-                                            │                  │ POST /api/jobs/{id}/run
-                                            ▼                  ▼
-                                 ┌──────────────────┐  ┌──────────────────────┐
-                                 │   Whisper STT    │  │   Hermes API server  │
-                                 │  /audio/trans.   │  │   (job scheduling)   │
-                                 └──────────────────┘  └──────────────────────┘
+┌─────────────────┐
+│ Pebble Index 01 │ ─┐
+│    (the ring)   │  │  multipart/form-data     ┌──────────────────────┐
+└─────────────────┘  ├── POST /webhook ────────►│ index-hermes-webhook │
+┌─────────────────┐  │                     ┌───-│   (this service)     │
+│ Apple Shortcuts │ ─┘  202 Accepted ◄─────┘   └────────┬──────┬──────┘
+└─────────────────┘                                background│task  │
+                                              ┌────────────┘      │
+                                     if audio only                │ POST /api/jobs
+                                              │                   │ POST /api/jobs/{id}/run
+                                              ▼                   ▼
+                                   ┌──────────────────┐  ┌──────────────────────┐
+                                   │   Whisper STT    │  │   Hermes API server  │
+                                   │  /audio/trans.   │  │   (job scheduling)   │
+                                   └──────────────────┘  └──────────────────────┘
 ```
 
 ---
@@ -81,7 +83,9 @@ ngrok http 8000
 # → https://abc123.ngrok-free.app
 ```
 
-### 4. Configure your Pebble Index 01
+### 4. Configure your client
+
+#### Option A — Pebble Index 01
 
 In the **Pebble** mobile app:
 
@@ -98,6 +102,14 @@ In the **Pebble** mobile app:
    Authorization: Bearer <your-WEBHOOK_AUTH_TOKEN>
    ```
    — and set the same value as `WEBHOOK_AUTH_TOKEN` in your `.env`
+
+#### Option B — Apple Shortcuts
+
+No ring? Use the ready-made shortcut to record audio from any Apple device and POST it to this webhook in the same multipart format:
+
+**[Voice Note → Hermes shortcut](https://www.icloud.com/shortcuts/7989a2a81177429d8f40d8c3ff9c31c6)**
+
+Open the shortcut, set your webhook URL (and optionally an auth token), then run it whenever you want to capture a voice note. The shortcut sends the raw audio file; Whisper handles the transcription, so `WHISPER_BASE_URL` must be configured.
 
 ---
 
